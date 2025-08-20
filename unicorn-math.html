@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Unicorn Math — Clouds & Numbers</title>
+<style>
+  :root{
+    --bg1:#bde6ff; --bg2:#e9f7ff;
+    --card:#ffffff; --glass:rgba(255,255,255,.65);
+    --accent:#ff8ac9; --accent2:#7ae7c7; --ink:#173042;
+    --shadow:0 8px 28px rgba(0,0,0,.12);
+  }
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+  body{background:linear-gradient(180deg,var(--bg1),var(--bg2));display:flex;justify-content:center;align-items:flex-start;padding:14px;}
+  .app{width:100%;max-width:520px;min-height:calc(100vh - 28px);display:flex;flex-direction:column;gap:10px}
+  header{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px;border-radius:16px;background:var(--glass);backdrop-filter:blur(8px);box-shadow:var(--shadow)}
+  .brand{display:flex;gap:10px;align-items:center}
+  h1{margin:0;font-size:18px;color:var(--ink)}
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{border:0;border-radius:12px;padding:10px 12px;font-weight:800;background:#7fc8ff;color:#04324a}
+  .btn.alt{background:#c9f7ea;color:#054d3b}
+  .btn.active{box-shadow:0 8px 16px rgba(0,0,0,.12);transform:translateY(-2px)}
+  .tog{font-size:12px;border:0;border-radius:10px;padding:8px 10px;background:#fff}
+  main.card{flex:1;background:linear-gradient(180deg,rgba(255,255,255,.45),rgba(255,255,255,.35));border-radius:18px;padding:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px;overflow:hidden}
+  .sky{position:relative;min-height:150px;display:flex;align-items:center;justify-content:center}
+  .cloud{background:#fff;border-radius:999px;padding:18px 14px;min-width:52px;min-height:48px;box-shadow:0 6px 12px rgba(0,0,0,.07);user-select:none;touch-action:manipulation;margin:6px;transition:transform .12s,opacity .12s}
+  .cloud.tapped{opacity:.5;transform:translateY(-6px) scale(.98)}
+  .clouds{display:flex;flex-wrap:wrap;justify-content:center;padding:6px 8px}
+  .unicorn{position:absolute;right:10px;bottom:6px;width:130px;max-width:38%;transform-origin:center bottom;transition:transform .35s cubic-bezier(.22,.9,.22,1)}
+  .unicorn.happy{transform:translateY(-16px) rotate(-6deg) scale(1.04)}
+  .unicorn.sad{transform:translateY(6px) rotate(5deg) scale(.97)}
+  .prompt{font-size:18px;font-weight:800;color:#08314a;text-align:center}
+  .choices{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .choice{background:#fff;border-radius:14px;padding:14px 18px;min-width:70px;text-align:center;font-size:22px;font-weight:900;box-shadow:var(--shadow);user-select:none;touch-action:manipulation}
+  canvas#confetti{position:fixed;left:50%;top:24%;transform:translateX(-50%);pointer-events:none;display:none;z-index:10}
+  footer{display:flex;justify-content:space-between;align-items:center;color:#0b4667;font-size:12px}
+  .hint{opacity:.9}
+  /* Trace board */
+  .trace-wrap{display:flex;flex-direction:column;gap:8px;align-items:center}
+  #traceCanvas{width:100%;max-width:420px;height:280px;background:#fff;border-radius:14px;box-shadow:inset 0 0 0 3px rgba(0,0,0,.04)}
+  .trace-controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .pill{border:0;border-radius:12px;padding:10px 12px;background:#fff;font-weight:800}
+  .digit-pick{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .digit{border:0;border-radius:10px;padding:8px 10px;background:#f6fbff}
+  @media (max-width:420px){
+    .cloud{min-width:46px;min-height:44px;padding:14px 12px}
+    .choice{min-width:62px;font-size:20px}
+    #traceCanvas{height:240px}
+  }
+</style>
+</head>
+<body>
+<div class="app" role="application" aria-label="Unicorn Math">
+  <header>
+    <div class="brand">
+      <!-- inline unicorn icon (no external images) -->
+      <svg width="56" height="40" viewBox="0 0 100 70" aria-hidden="true">
+        <g>
+          <ellipse cx="46" cy="46" rx="22" ry="14" fill="#fff"/>
+          <circle cx="52" cy="40" r="2.4" fill="#133"/>
+          <path d="M20 28c12-10 34-12 48-6" stroke="#ff8ac9" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <path d="M44 18c8-8 22-10 36-8" stroke="#ffd27a" stroke-width="5" fill="none" stroke-linecap="round"/>
+        </g>
+      </svg>
+      <div>
+        <h1>Unicorn Math</h1>
+        <div style="font-size:12px;color:#0b4667">Clouds, counting & cheerful rewards</div>
+      </div>
+    </div>
+    <div class="controls" role="toolbar" aria-label="Modes">
+      <button class="btn active" data-mode="count">Count</button>
+      <button class="btn" data-mode="match">Match</button>
+      <button class="btn" data-mode="add">Add</button>
+      <button class="btn" data-mode="sub">Subtract</button>
+      <button class="btn alt" data-mode="trace">Trace</button>
+      <button id="voiceTog" class="tog" aria-pressed="true">Voice: On</button>
+    </div>
+  </header>
+
+  <main class="card" id="card">
+    <div class="sky">
+      <div id="clouds" class="clouds" aria-live="polite"></div>
+      <div id="uni" class="unicorn" aria-hidden="true">
+        <svg viewBox="0 0 200 150" style="width:100%">
+          <g>
+            <ellipse cx="110" cy="100" rx="60" ry="38" fill="#fff"/>
+            <path d="M40 50c0 0 38-24 72-10 0 0 8-24 38-30" stroke="#ff8ac9" stroke-width="8" fill="none" stroke-linecap="round"/>
+            <circle cx="120" cy="92" r="4" fill="#223"/>
+            <path d="M50 35c-4 12 10 18 18 20" stroke="#ffd166" stroke-width="6" stroke-linecap="round" fill="none"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="prompt" id="prompt">Tap each cloud and count!</div>
+    <div id="choices" class="choices" role="group" aria-label="Answer choices"></div>
+
+    <!-- Tracing board -->
+    <div id="tracePanel" class="trace-wrap" style="display:none">
+      <canvas id="traceCanvas" width="840" height="560"></canvas>
+      <div class="trace-controls">
+        <button class="pill" id="traceClear">Clear</button>
+        <button class="pill" id="traceGuide">Guide: On</button>
+        <div class="digit-pick" id="digitPick"></div>
+      </div>
+    </div>
+
+    <canvas id="confetti" width="360" height="140"></canvas>
+  </main>
+
+  <footer>
+    <div>Mode: <b id="modeLabel">Count</b> • Level: <b id="lvlLabel">1–4</b></div>
+    <div class="hint">First tap enables sound/voice on iPhone</div>
+  </footer>
+</div>
+
+<script>
+/* ====== Unicorn Math (All-in-one, offline) ====== */
+
+const $ = id => document.getElementById(id);
+const cloudsEl = $('clouds'), promptEl = $('prompt'), choicesEl = $('choices'), uniEl = $('uni');
+const confettiCanvas = $('confetti'), ctxConf = confettiCanvas.getContext('2d');
+const voiceTog = $('voiceTog'), modeLabel = $('modeLabel'), lvlLabel = $('lvlLabel');
+const card = $('card');
+
+/* ---- State & Adaptive difficulty ---- */
+const state = {
+  mode: 'count',
+  levelMax: 4,          // adaptive ceiling, grows toward 10
+  streak: 0,
+  wrongs: 0,
+  cloudCount: 0,
+  target: 0,
+  voiceOn: true
+};
+
+/* ---- Audio (WebAudio) ---- */
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioCtx();
+
+function playCorrect(){
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain(), n = audioCtx.currentTime;
+  o.type = 'triangle'; o.frequency.setValueAtTime(880, n);
+  g.gain.setValueAtTime(0, n);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.exponentialRampToValueAtTime(1320, n + .22);
+  g.gain.linearRampToValueAtTime(.08, n + .02);
+  g.gain.exponentialRampToValueAtTime(.0001, n + .5);
+  o.start(n); o.stop(n + .55);
+}
+function playWrong(){
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain(), n = audioCtx.currentTime;
+  o.type = 'sawtooth'; o.frequency.setValueAtTime(220, n);
+  o.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(.06, n);
+  o.frequency.exponentialRampToValueAtTime(90, n + .35);
+  g.gain.linearRampToValueAtTime(.0001, n + .45);
+  o.start(n); o.stop(n + .5);
+}
+
+/* ---- Voice (TTS) ---- */
+function sayGreatJob(){
+  if(!state.voiceOn) return;
+  try {
+    const s = new SpeechSynthesisUtterance('Great job!');
+    s.rate = 1.0; s.pitch = 1.1; s.lang = 'en-US';
+    speechSynthesis.cancel(); speechSynthesis.speak(s);
+  } catch(e){}
+}
+
+/* resume audio/voice on first touch (iOS) */
+function unlockAudio(){ if(audioCtx.state === 'suspended') audioCtx.resume(); }
+card.addEventListener('pointerdown', unlockAudio, {passive:true});
+
+/* ---- Confetti ---- */
+function confetti(){
+  const W = confettiCanvas.width = Math.min(window.innerWidth - 40, 420);
+  const H = confettiCanvas.height = 140;
+  confettiCanvas.style.display = 'block';
+  const pieces = Array.from({length:40}, _=>({
+    x: W/2 + (Math.random()*260-130),
+    y: -10 + Math.random()*40,
+    dx: (Math.random()*2-1)*2,
+    dy: 2+Math.random()*4,
+    size: 6+Math.random()*6,
+    color: ['#ff8ac9','#ffd27a','#7ae7c7','#7fb7ff'][Math.floor(Math.random()*4)],
+    rot: Math.random()*360
+  }));
+  let frames = 0;
+  (function tick(){
+    frames++;
+    ctxConf.clearRect(0,0,W,H);
+    for(const p of pieces){
+      p.x+=p.dx; p.y+=p.dy; p.rot+=p.dx*2;
+      ctxConf.save(); ctxConf.translate(p.x,p.y); ctxConf.rotate(p.rot*Math.PI/180);
+      ctxConf.fillStyle = p.color; ctxConf.fillRect(-p.size/2,-p.size/2,p.size,p.size*.6);
+      ctxConf.restore();
+    }
+    if(frames<80) requestAnimationFrame(tick);
+    else { confettiCanvas.style.display='none'; }
+  })();
+}
+
+/* ---- Helpers ---- */
+const rint = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+function bounceUnicorn(happy=true){
+  uniEl.classList.remove('happy','sad');
+  uniEl.classList.add(happy?'happy':'sad');
+  setTimeout(()=>uniEl.classList.remove('happy','sad'), 700);
+}
+function updateLevelLabels(){ lvlLabel.textContent = `1–${state.levelMax}`; }
+function adaptOnResult(correct){
+  if(correct){ state.streak++; state.wrongs=0; if(state.streak>=3 && state.levelMax<10){ state.levelMax++; state.streak=0; } }
+  else { state.wrongs++; state.streak=0; if(state.wrongs>=2 && state.levelMax>4){ state.levelMax--; state.wrongs=0; } }
+  updateLevelLabels();
+}
+
+/* ---- Clean up any temp rows before each round ---- */
+function cleanupTempRows(){
+  document.querySelectorAll('.tempRow').forEach(e=>e.remove());
+}
+
+/* ---- Games ---- */
+function renderClouds(n, interactive=true){
+  cloudsEl.innerHTML = '';
+  for(let i=0;i<n;i++){
+    const d = document.createElement('div'); d.className='cloud'; d.setAttribute('role','button'); d.setAttribute('aria-label','Cloud '+(i+1));
+    if(interactive){
+      d.addEventListener('pointerdown', onCloudTap, {passive:true});
+    }
+    cloudsEl.appendChild(d);
+  }
+}
+function newRound(){
+  cleanupTempRows();
+  choicesEl.innerHTML=''; $('tracePanel').style.display='none'; cloudsEl.style.display='flex';
+  modeLabel.textContent = ({count:'Count',match:'Match',add:'Add',sub:'Subtract',trace:'Trace'})[state.mode];
+  if(state.mode==='count'){
+    state.cloudCount = rint(1, Math.min(7, state.levelMax));
+    renderClouds(state.cloudCount,true);
+    promptEl.textContent = 'Tap each cloud and count!';
+  } else if(state.mode==='match'){
+    state.cloudCount = rint(1, Math.min(10,state.levelMax));
+    renderClouds(state.cloudCount,false);
+    promptEl.textContent = 'How many clouds do you see?';
+    makeChoices(state.cloudCount);
+  } else if(state.mode==='add'){
+    const a = rint(1, Math.max(1, Math.min(6, state.levelMax-1)));
+    const b = rint(1, Math.max(1, Math.min(10-a, state.levelMax-a)));
+    state.target = a+b;
+    renderClouds(a,false);
+    const plus = document.createElement('div'); plus.style.width='100%'; plus.style.textAlign='center'; plus.innerHTML = '<div style="font-weight:900;font-size:22px;padding:4px 0">+</div>';
+    cloudsEl.appendChild(plus);
+    const row2 = document.createElement('div'); row2.className='clouds tempRow';
+    for(let i=0;i<b;i++){ const c=document.createElement('div'); c.className='cloud'; row2.appendChild(c); }
+    card.appendChild(row2);
+    promptEl.textContent = `How many in total? (${a} + ${b})`;
+    makeChoices(state.target);
+  } else if(state.mode==='sub'){
+    const a = rint(2, Math.min(10,state.levelMax)); const b = rint(1, Math.min(6, a-1));
+    state.target = a-b;
+    renderClouds(a,false);
+    const minus = document.createElement('div'); minus.style.width='100%'; minus.style.textAlign='center'; minus.innerHTML = '<div style="font-weight:900;font-size:22px;padding:4px 0">−</div>';
+    cloudsEl.appendChild(minus);
+    const row2 = document.createElement('div'); row2.className='clouds tempRow';
+    for(let i=0;i<b;i++){ const c=document.createElement('div'); c.className='cloud'; row2.appendChild(c); }
+    card.appendChild(row2);
+    promptEl.textContent = `How many remain? (${a} − ${b})`;
+    makeChoices(state.target);
+  } else if(state.mode==='trace'){
+    promptEl.textContent = 'Trace the number with your finger!';
+    cloudsEl.style.display='none';
+    $('tracePanel').style.display='flex';
+    showTraceGuide();
+  }
+}
+function onCloudTap(e){
+  unlockAudio();
+  const c = e.currentTarget;
+  if(c.classList.contains('tapped')) return;
+  c.classList.add('tapped');
+  const tapped = cloudsEl.querySelectorAll('.cloud.tapped').length;
+  promptEl.textContent = `Counted: ${tapped}`;
+  if(tapped === state.cloudCount){
+    playCorrect(); sayGreatJob(); confetti(); bounceUnicorn(true);
+    adaptOnResult(true);
+    setTimeout(newRound, 850);
+  }
+}
+function makeChoices(correct){
+  choicesEl.innerHTML='';
+  const opts = new Set([correct]);
+  while(opts.size<4) opts.add(Math.max(0, Math.min(10, correct + rint(-3,3)))); // allow 0 in subtraction
+  const arr = Array.from(opts).sort(()=>Math.random()-.5);
+  arr.forEach(v=>{
+    const b = document.createElement('div'); b.className='choice'; b.textContent = v;
+    b.addEventListener('pointerdown', ()=>checkChoice(v, correct), {passive:true});
+    choicesEl.appendChild(b);
+  });
+}
+function checkChoice(val, correct){
+  unlockAudio();
+  if(val===correct){
+    playCorrect(); sayGreatJob(); confetti(); bounceUnicorn(true);
+    adaptOnResult(true);
+    setTimeout(newRound, 850);
+  } else {
+    playWrong(); bounceUnicorn(false); adaptOnResult(false);
+  }
+}
+
+/* ---- Mode switching ---- */
+document.querySelectorAll('[data-mode]').forEach(btn=>{
+  btn.addEventListener('pointerdown', ()=>{
+    document.querySelectorAll('[data-mode]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.mode = btn.dataset.mode;
+    newRound();
+  }, {passive:true});
+});
+
+/* ---- Voice toggle ---- */
+voiceTog.addEventListener('pointerdown', ()=>{
+  state.voiceOn = !state.voiceOn;
+  voiceTog.textContent = 'Voice: ' + (state.voiceOn ? 'On' : 'Off');
+  voiceTog.setAttribute('aria-pressed', state.voiceOn?'true':'false');
+}, {passive:true});
+
+/* ---- Simple floating clouds animation (ambient) ---- */
+(function floatClouds(){
+  let t=0;
+  function step(){
+    t+=.01;
+    cloudsEl.style.transform = `translateX(${Math.sin(t)*4}px)`;
+    requestAnimationFrame(step);
+  }
+  step();
+})();
+
+/* ====== Tracing Board ====== */
+const tCanvas = $('traceCanvas'), tCtx = tCanvas.getContext('2d');
+let drawing = false, guideOn = true, currentDigit = 1;
+
+function resizeTrace(){ drawTrace(); }
+window.addEventListener('resize', resizeTrace);
+
+function drawGuideDigit(d){
+  // Draw dotted big digit in center
+  const W = tCanvas.width, H = tCanvas.height;
+  tCtx.save();
+  tCtx.lineWidth = 14; tCtx.setLineDash([24,20]); tCtx.strokeStyle = '#d8ecff';
+  tCtx.lineCap = 'round'; tCtx.lineJoin='round';
+  tCtx.translate(W/2, H/2); tCtx.scale(4,4); tCtx.translate(-10,-20);
+  const glyphs = {
+    0:'M10 20 q15 -20 30 0 q-15 20 -30 0 z',
+    1:'M20 35 v-30 m0 0 l-8 8',
+    2:'M10 10 q10 -10 20 0 q10 10 -10 20 l-20 20 h30',
+    3:'M10 10 q10 -10 20 0 q-10 10 -20 10 q10 -10 20 0 q-10 10 -20 10',
+    4:'M30 0 v40 m-20 -20 h30',
+    5:'M30 0 h-20 v20 q10 -10 20 0 q-10 10 -20 10',
+    6:'M28 0 q-18 0 -18 16 q0 12 18 12 q-18 0 -18 -18 q0 -10 16 -10',
+    7:'M8 0 h30 l-20 40',
+    8:'M20 0 q12 0 12 10 q0 10 -12 10 q-12 0 -12 -10 q0 -10 12 -10 M20 20 q12 0 12 10 q0 10 -12 10 q-12 0 -12 -10 q0 -10 12 -10',
+    9:'M12 18 q0 -18 18 -18 q-16 0 -16 18 q0 12 18 12'
+  };
+  const path = new Path2D(glyphs[d]);
+  tCtx.stroke(path);
+  tCtx.restore();
+}
+
+function drawTrace(){
+  tCtx.clearRect(0,0,tCanvas.width,tCanvas.height);
+  tCtx.fillStyle = '#fff'; tCtx.fillRect(0,0,tCanvas.width,tCanvas.height);
+  if(guideOn) drawGuideDigit(currentDigit);
+}
+
+function pointerPos(e){
+  const r = tCanvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) * (tCanvas.width / r.width);
+  const y = (e.clientY - r.top) * (tCanvas.height / r.height);
+  return {x,y};
+}
+tCanvas.addEventListener('pointerdown', e=>{
+  unlockAudio();
+  drawing = true;
+  const {x,y} = pointerPos(e);
+  tCtx.lineWidth = 18; tCtx.lineCap = 'round'; tCtx.strokeStyle = '#7fb7ff';
+  tCtx.beginPath(); tCtx.moveTo(x,y);
+});
+tCanvas.addEventListener('pointermove', e=>{
+  if(!drawing) return;
+  const {x,y} = pointerPos(e); tCtx.lineTo(x,y); tCtx.stroke();
+});
+['pointerup','pointerleave','pointercancel'].forEach(ev=>tCanvas.addEventListener(ev, ()=>{ drawing=false; }));
+
+$('traceClear').addEventListener('pointerdown', ()=>{ drawTrace(); }, {passive:true});
+$('traceGuide').addEventListener('pointerdown', (e)=>{
+  guideOn = !guideOn;
+  e.currentTarget.textContent = 'Guide: ' + (guideOn?'On':'Off');
+  drawTrace();
+},{passive:true});
+
+// Digit picker 1–10
+(function buildDigits(){
+  const wrap = $('digitPick'); wrap.innerHTML='';
+  for(let i=0;i<=10;i++){ /* include 0 for subtraction practice */
+    const b = document.createElement('button'); b.className='digit'; b.textContent = i;
+    b.addEventListener('pointerdown', ()=>{ currentDigit=i; drawTrace(); sayGreatJob(); }, {passive:true});
+    wrap.appendChild(b);
+  }
+})();
+
+function showTraceGuide(){ currentDigit = rint(1,10); guideOn=true; $('traceGuide').textContent='Guide: On'; drawTrace(); }
+
+/* ---- Start ---- */
+function updateLevelLabels(){ lvlLabel.textContent = `1–${state.levelMax}`; }
+updateLevelLabels();
+newRound();
+
+</script>
+</body>
+</html>
